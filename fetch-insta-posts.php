@@ -16,11 +16,11 @@ use MetzWeb\Instagram\Instagram;
 
 class Fetch_Insta_Posts {
 
-	private $clientID = '8c6c287fc7ab4ff4b32ac00eae15f83b';
-	private $clientSecret = 'b95e1e7762fd4a9c9fc6431e7c6f602e';
 	private $settingsPage;
 	private $instagram;
 	private $account;
+	private $clientID;
+	private $clientSecret;
 
 	function __construct() {
 
@@ -30,18 +30,17 @@ class Fetch_Insta_Posts {
 
 		$this->settingsPage = admin_url( 'options-general.php?page=instagram' );
 
+		if ( defined('INSTAGRAM_CLIENT_ID') ) {
+			$this->clientID = INSTAGRAM_CLIENT_ID;
+		}
+
+		if ( defined('INSTAGRAM_CLIENT_SECRET') ) {
+			$this->clientSecret = INSTAGRAM_CLIENT_SECRET;
+		}
+
 	}
 
 	function register_post_type() {
-
-//		$args = array(
-//			'public'             => false,
-//			'capability_type'    => 'post',
-//			'hierarchical'       => false,
-//			'supports'           => array( 'title', 'custom-fields' )
-//		);
-//
-//		register_post_type( 'insta-post', $args );
 
 		$labels = array(
 			'name'               => 'Insta Posts',
@@ -61,7 +60,7 @@ class Fetch_Insta_Posts {
 		);
 
 		$args = array(
-			'public'             => false,
+			'public'             => true,
 			'labels'             => $labels,
 			'capability_type'    => 'post',
 			'hierarchical'       => false,
@@ -86,18 +85,6 @@ class Fetch_Insta_Posts {
 
 		$this->setup_insta();
 
-		$code = $_GET['code'];
-
-		if (isset($code)) {
-
-			$data = $instagram->getOAuthToken($code);
-
-			if ( $data->access_token ) {
-				update_option( 'fetch_insta_posts_token', $data->access_token );
-			}
-
-		}
-
 		$fetched = new WP_Query(array(
 			'post_type' => 'insta-post',
 			'posts_per_page' => 20
@@ -111,13 +98,15 @@ class Fetch_Insta_Posts {
 
 		if ( $_GET['page'] == 'instagram' ) {
 
+			$this->setup_insta();
+
 			if ( $_GET['fetch_insta_posts'] ) {
 				$this->fetch_insta_posts();
 				wp_redirect( $this->settingsPage );
 			}
 
-			if ( $_GET['clear_insta_posts'] ) {
-				$this->clear_insta_posts();
+			if ( isset($_GET['code']) ) {
+				$this->set_auth_token();
 				wp_redirect( $this->settingsPage );
 			}
 
@@ -127,10 +116,12 @@ class Fetch_Insta_Posts {
 
 	function setup_insta() {
 
+		if ( !$this->clientID || !$this->clientSecret ) return;
+
 		$this->instagram = new Instagram(array(
 			'apiKey' => $this->clientID,
 			'apiSecret' => $this->clientSecret,
-			'apiCallback' => $settingsPage
+			'apiCallback' => $this->settingsPage
 		));
 
 		$token = get_option( 'fetch_insta_posts_token' );
@@ -148,12 +139,21 @@ class Fetch_Insta_Posts {
 
 	}
 
+	function set_auth_token() {
+
+		if (!$this->instagram) return;
+
+		$data = $this->instagram->getOAuthToken($_GET['code']);
+
+		if ( $data->access_token ) {
+			update_option( 'fetch_insta_posts_token', $data->access_token );
+		}
+
+	}
+
 	function fetch_insta_posts() {
 
-		$this->setup_insta();
-
 		if ( !$this->account ) return;
-
 
 		$latestInstaPost = get_posts( array(
 			'post_type' => 'insta-post',
@@ -195,15 +195,18 @@ class Fetch_Insta_Posts {
 				'post_type' => 'insta-post',
 				'post_date' => $created->format('Y-m-d H:i:s')
 			);
+			
 
 			if ( $id = wp_insert_post( $args ) ) {
 
 				update_post_meta( $id, 'insta_id', $post->id );
 				update_post_meta( $id, 'insta_link', $post->link );
-				update_post_meta( $id, 'insta_img', $post->images->standard_resolution );
+				update_post_meta( $id, 'insta_img', $post->images->standard_resolution->url );
 				update_post_meta( $id, 'insta_caption', $post->caption->text );
 				update_post_meta( $id, 'insta_tags', $post->tags );
-				wp_set_object_terms( $id, 'instagram', 'news-type' );
+//				wp_set_object_terms( $id, 'instagram', 'news-type' );
+
+				do_action( 'fetch_insta_inserted_post', $id, $post );
 
 			}
 

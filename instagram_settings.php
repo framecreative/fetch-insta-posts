@@ -5,7 +5,11 @@
 
 	<h2 class="title">Account</h2>
 
-	<?php if ( $this->account ) : ?>
+	<?php if ( !$this->instagram ) : ?>
+
+		<p>Client settings must be set before the account can be set</p>
+
+	<?php elseif ( $this->account ) : ?>
 
 		<p>Current Account: <strong><?php echo $this->account->full_name ?> (@<?php echo $this->account->username ?>)</strong></p>
 		<p><a class="button button-primary" href="<?php echo $this->instagram->getLoginUrl() ?>">Replace Account</a></p>
