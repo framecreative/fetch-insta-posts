@@ -28,6 +28,10 @@ class Fetch_Insta_Posts {
 		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
 		add_action( 'admin_init', array( $this, 'check_url_variables' ) );
 
+		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) );
+		add_action( 'init', array( $this, 'schedule_fetch' ) );
+		add_action( 'fetch_insta_posts', array( $this, 'fetch_insta_posts' ) );
+
 		$this->settingsPage = admin_url( 'options-general.php?page=instagram' );
 
 		if ( defined('INSTAGRAM_CLIENT_ID') ) {
@@ -153,6 +157,8 @@ class Fetch_Insta_Posts {
 
 	function fetch_insta_posts() {
 
+		$this->setup_insta();
+
 		if ( !$this->account ) return;
 
 		$latestInstaPost = get_posts( array(
@@ -168,9 +174,6 @@ class Fetch_Insta_Posts {
 		} else {
 			$latestInstaPost = false;
 		}
-
-
-
 
 
 		$url = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $this->instagram->getAccessToken();
@@ -213,6 +216,27 @@ class Fetch_Insta_Posts {
 		}
 
 	}
+
+
+
+	function cron_schedules( $schedules ) {
+
+		$schedules['qtr-hour'] = array(
+			'interval' => 15 * 60, // 15 minutes * 60 seconds
+			'display' => 'Qtr Hour'
+		);
+
+		return $schedules;
+	}
+
+	function schedule_fetch() {
+
+		if( !wp_next_scheduled('fetch_insta_posts') ) {
+			wp_schedule_event ( time(), 'qtr-hour', 'fetch_insta_posts' );
+		}
+
+	}
+
 
 }
 
