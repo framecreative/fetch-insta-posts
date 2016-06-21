@@ -32,15 +32,10 @@ class Fetch_Insta_Posts {
 		add_action( 'init', array( $this, 'schedule_fetch' ) );
 		add_action( 'fetch_insta_posts', array( $this, 'fetch_insta_posts' ) );
 
+		$this->tokenHelper = 'http://instatoken.frmdv.com';
 		$this->settingsPage = admin_url( 'options-general.php?page=instagram' );
-
-		if ( defined('INSTAGRAM_CLIENT_ID') ) {
-			$this->clientID = INSTAGRAM_CLIENT_ID;
-		}
-
-		if ( defined('INSTAGRAM_CLIENT_SECRET') ) {
-			$this->clientSecret = INSTAGRAM_CLIENT_SECRET;
-		}
+		$this->clientID = '6fe48e6965234e7690a13460aa543525';
+		$this->clientSecret = 'ade4c0d81ec44962a8851c45c7afe2b3';
 
 	}
 
@@ -109,8 +104,13 @@ class Fetch_Insta_Posts {
 				wp_redirect( $this->settingsPage );
 			}
 
-			if ( isset($_GET['code']) ) {
-				$this->set_auth_token();
+			if ( isset($_GET['insta_token']) ) {
+				update_option( 'fetch_insta_posts_token', $_GET['insta_token'] );
+				wp_redirect( $this->settingsPage );
+			}
+
+			if ( isset($_GET['remove_insta_account']) ) {
+				delete_option( 'fetch_insta_posts_token' );
 				wp_redirect( $this->settingsPage );
 			}
 
@@ -125,7 +125,7 @@ class Fetch_Insta_Posts {
 		$this->instagram = new Instagram(array(
 			'apiKey' => $this->clientID,
 			'apiSecret' => $this->clientSecret,
-			'apiCallback' => $this->settingsPage
+			'apiCallback' => add_query_arg( 'return_uri', $this->settingsPage, $this->tokenHelper ) 
 		));
 
 		$token = get_option( 'fetch_insta_posts_token' );
@@ -139,18 +139,6 @@ class Fetch_Insta_Posts {
 				$this->account = $user->data;
 			}
 
-		}
-
-	}
-
-	function set_auth_token() {
-
-		if (!$this->instagram) return;
-
-		$data = $this->instagram->getOAuthToken($_GET['code']);
-
-		if ( $data->access_token ) {
-			update_option( 'fetch_insta_posts_token', $data->access_token );
 		}
 
 	}
@@ -174,7 +162,6 @@ class Fetch_Insta_Posts {
 		} else {
 			$latestInstaPost = false;
 		}
-
 
 		$url = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $this->instagram->getAccessToken();
 
@@ -231,8 +218,8 @@ class Fetch_Insta_Posts {
 
 	function schedule_fetch() {
 
-		if( !wp_next_scheduled('fetch_insta_posts') ) {
-			wp_schedule_event ( time(), 'qtr-hour', 'fetch_insta_posts' );
+		if ( !wp_next_scheduled('fetch_insta_posts') ) {
+			wp_schedule_event( time(), 'qtr-hour', 'fetch_insta_posts' );
 		}
 
 	}

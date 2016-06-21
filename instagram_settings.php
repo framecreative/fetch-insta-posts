@@ -12,7 +12,10 @@
 	<?php elseif ( $this->account ) : ?>
 
 		<p>Current Account: <strong><?php echo $this->account->full_name ?> (@<?php echo $this->account->username ?>)</strong></p>
-		<p><a class="button button-primary" href="<?php echo $this->instagram->getLoginUrl() ?>">Replace Account</a></p>
+		<p>
+			<a class="button button-primary" href="<?php echo $this->instagram->getLoginUrl() ?>">Replace Account</a> 
+			<a href="<?php echo add_query_arg( 'remove_insta_account', true, $this->settingsPage ) ?>" class="button">Remove Account</a>
+		</p>
 
 	<?php else : ?>
 
