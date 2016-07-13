@@ -59,7 +59,7 @@ class Fetch_Insta_Posts {
 		);
 
 		$args = array(
-			'public'             => true,
+			'public'             => false,
 			'labels'             => $labels,
 			'capability_type'    => 'post',
 			'hierarchical'       => false,
@@ -137,6 +137,7 @@ class Fetch_Insta_Posts {
 
 			if ( isset($user->data) ) {
 				$this->account = $user->data;
+				$this->fetchUrl = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $token;
 			}
 
 		}
@@ -172,15 +173,15 @@ class Fetch_Insta_Posts {
 		$feed = file_get_contents( $url );
 		$feed = json_decode( $feed );
 
-		foreach( $feed->data as $post ) {
+		foreach( $feed->data as $instaPost ) {
 
-			if ( $post->id == $latestInstaPost ) break;
+			if ( $instaPost->id == $latestInstaPost ) break;
 
 			$created = new DateTime();
-			$created->setTimestamp($post->created_time);
+			$created->setTimestamp($instaPost->created_time);
 
 			$args = array(
-				'post_title' => $post->caption->text,
+				'post_title' => $instaPost->caption->text,
 				'post_status' => 'publish',
 				'post_type' => 'insta-post',
 				'post_date' => $created->format('Y-m-d H:i:s')
@@ -189,14 +190,14 @@ class Fetch_Insta_Posts {
 
 			if ( $id = wp_insert_post( $args ) ) {
 
-				update_post_meta( $id, 'insta_id', $post->id );
-				update_post_meta( $id, 'insta_link', $post->link );
-				update_post_meta( $id, 'insta_img', $post->images->standard_resolution->url );
-				update_post_meta( $id, 'insta_caption', $post->caption->text );
-				update_post_meta( $id, 'insta_tags', $post->tags );
-//				wp_set_object_terms( $id, 'instagram', 'news-type' );
+				update_post_meta( $id, 'insta_id', $instaPost->id );
+				update_post_meta( $id, 'insta_link', $instaPost->link );
+				update_post_meta( $id, 'insta_img', $instaPost->images->standard_resolution->url );
+				update_post_meta( $id, 'insta_img_width', $instaPost->images->standard_resolution->width );
+				update_post_meta( $id, 'insta_img_height', $instaPost->images->standard_resolution->height );
+				update_post_meta( $id, 'insta_tags', $instaPost->tags );
 
-				do_action( 'fetch_insta_inserted_post', $id, $post );
+				do_action( 'fetch_insta_inserted_post', $id, $instaPost );
 
 			}
 
