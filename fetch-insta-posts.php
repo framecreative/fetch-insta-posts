@@ -31,6 +31,8 @@ class Fetch_Insta_Posts {
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) );
 		add_action( 'init', array( $this, 'schedule_fetch' ) );
 		add_action( 'fetch_insta_posts', array( $this, 'fetch_insta_posts' ) );
+		add_filter( 'manage_insta-post_posts_columns' , array( $this, 'insta_post_admin_columns' ) );
+		add_action( 'manage_insta-post_posts_custom_column' , array( $this, 'insta_post_admin_column_content' ), 10, 2 );
 
 		$this->tokenHelper = 'http://instatoken.frmdv.com';
 		$this->settingsPage = admin_url( 'options-general.php?page=instagram' );
@@ -64,7 +66,7 @@ class Fetch_Insta_Posts {
 			'capability_type'    => 'post',
 			'hierarchical'       => false,
 			'menu_icon'          => 'dashicons-camera',
-			'supports'           => array( 'title', 'custom-fields' ),
+			'supports'           => array( 'title', 'custom-fields', 'thumbnail' ),
 			'menu_position'		 => 51,
 			'has_archive'        => false,
 			'show_ui'			 => true
@@ -173,39 +175,78 @@ class Fetch_Insta_Posts {
 		$feed = file_get_contents( $url );
 		$feed = json_decode( $feed );
 
-		foreach( $feed->data as $instaPost ) {
 
-			if ( $instaPost->id == $latestInstaPost ) break;
+		foreach( $feed->data as $data ) {
 
-			$created = new DateTime();
-			$created->setTimestamp($instaPost->created_time);
+			if ( $data->id == $latestInstaPost ) break;
 
-			$args = array(
-				'post_title' => $instaPost->caption->text,
-				'post_status' => 'publish',
-				'post_type' => 'insta-post',
-				'post_date' => $created->format('Y-m-d H:i:s')
+			$this->create_insta_post( $data );
+
+		}
+
+	}
+
+	function create_insta_post( $data ) {
+
+		$created = new DateTime();
+		$created->setTimestamp($data->created_time);
+
+		$args = array(
+			'post_title' => $data->caption->text,
+			'post_status' => 'publish',
+			'post_type' => 'insta-post',
+			'post_date' => $created->format('Y-m-d H:i:s')
+		);
+
+		if ( $id = wp_insert_post( $args ) ) {
+
+			update_post_meta( $id, 'insta_id', $data->id );
+			update_post_meta( $id, 'insta_link', $data->link );
+			update_post_meta( $id, 'insta_img', $data->images->standard_resolution->url );
+			update_post_meta( $id, 'insta_img_width', $data->images->standard_resolution->width );
+			update_post_meta( $id, 'insta_img_height', $data->images->standard_resolution->height );
+			update_post_meta( $id, 'insta_tags', $data->tags );
+
+			$this->attach_feature_image( $id, $data->images->standard_resolution->url );
+
+			do_action( 'fetch_insta_inserted_post', $id, $data );
+
+		}
+
+	}
+
+	function attach_feature_image( $id, $featureUrl ) {
+
+		$featureName = basename( $featureUrl );
+		$featureUpload = wp_upload_bits( $featureName, null, file_get_contents($featureUrl) );
+
+		if (!$featureUpload['error']) {
+
+			$featureType = wp_check_filetype($featureName, null );
+
+			$attachment = array(
+				'post_mime_type' => $featureType['type'],
+				'post_title' => preg_replace('/\.[^.]+$/', '', $featureName),
+				'post_content' => '',
+				'post_status' => 'inherit',
+				'post_author' => get_current_user_id()
 			);
-			
 
-			if ( $id = wp_insert_post( $args ) ) {
+			$attachment_id = wp_insert_attachment( $attachment, $featureUpload['file'], $id );
 
-				update_post_meta( $id, 'insta_id', $instaPost->id );
-				update_post_meta( $id, 'insta_link', $instaPost->link );
-				update_post_meta( $id, 'insta_img', $instaPost->images->standard_resolution->url );
-				update_post_meta( $id, 'insta_img_width', $instaPost->images->standard_resolution->width );
-				update_post_meta( $id, 'insta_img_height', $instaPost->images->standard_resolution->height );
-				update_post_meta( $id, 'insta_tags', $instaPost->tags );
+			if (!is_wp_error($attachment_id)) {
 
-				do_action( 'fetch_insta_inserted_post', $id, $instaPost );
+				require_once( ABSPATH . "wp-admin" . '/includes/image.php');
+				$attachment_data = wp_generate_attachment_metadata( $attachment_id, $featureUpload['file'] );
+				wp_update_attachment_metadata($attachment_id, $attachment_data);
+
+				set_post_thumbnail( $id, $attachment_id );
 
 			}
 
 		}
 
 	}
-
-
 
 	function cron_schedules( $schedules ) {
 
@@ -221,6 +262,29 @@ class Fetch_Insta_Posts {
 
 		if ( !wp_next_scheduled('fetch_insta_posts') ) {
 			wp_schedule_event( time(), 'qtr-hour', 'fetch_insta_posts' );
+		}
+
+	}
+
+	function insta_post_admin_columns( $columns ) {
+
+		$insertAfter = 'title';
+		$position = array_search( $insertAfter, array_keys($columns) ) + 1;
+
+		if ( $insertAfter === false ) return $columns;
+
+		$columns = array_slice( $columns, 0, $position, true ) + [ 'featured_image' => 'Preview' ] + array_slice( $columns, $position, count($columns) - 1, true );
+
+		return $columns;
+
+	}
+
+	function insta_post_admin_column_content( $column, $post_id ) {
+
+		if ( $column == 'featured_image' ) {
+
+			echo get_the_post_thumbnail( $post_id, array( 150, 150 ) );
+
 		}
 
 	}
