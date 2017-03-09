@@ -106,6 +106,11 @@ class Fetch_Insta_Posts {
 				wp_redirect( $this->settingsPage );
 			}
 
+			if ( $_GET['update_feature_images'] ) {
+				$this->update_feature_images();
+				wp_redirect( $this->settingsPage );
+			}
+
 			if ( isset($_GET['insta_token']) ) {
 				update_option( 'fetch_insta_posts_token', $_GET['insta_token'] );
 				wp_redirect( $this->settingsPage );
@@ -155,7 +160,7 @@ class Fetch_Insta_Posts {
 		$latestInstaPost = get_posts( array(
 			'post_type' => 'insta-post',
 			'posts_per_page' => 1,
-			'post_status' => 'publish',
+			'post_status' => [ 'publish', 'trash' ],
 			'orderby' => 'date',
 			'order' => 'DESC'
 		) );
@@ -243,6 +248,27 @@ class Fetch_Insta_Posts {
 				set_post_thumbnail( $id, $attachment_id );
 
 			}
+
+		}
+
+	}
+
+	function update_feature_images() {
+
+		$instaPosts = get_posts([
+			'post_type' => 'insta-post',
+			'nopaging' => true
+		]);
+
+		foreach ( $instaPosts as $item ) {
+
+			if ( has_post_thumbnail( $item->ID ) ) continue;
+
+			$imageUrl = get_post_meta( $item->ID, 'insta_img', true );
+
+			if ( !$imageUrl ) continue;
+
+			$this->attach_feature_image( $item->ID, $imageUrl );
 
 		}
 

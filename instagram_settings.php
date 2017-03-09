@@ -14,9 +14,33 @@
 		<p>
 			Current Account: <strong><?php echo $this->account->full_name ?> (@<?php echo $this->account->username ?>)</strong>
 		</p>
+
 		<p>
 			<a class="button button-primary" href="<?php echo $this->instagram->getLoginUrl() ?>">Replace Account</a> 
 			<a href="<?php echo add_query_arg( 'remove_insta_account', true, $this->settingsPage ) ?>" class="button">Remove Account</a>
+		</p>
+
+		<p><br></p>
+
+		<h2 class="title">Fetched Posts</h2>
+
+		<?php if ( $fetched->found_posts == 0 ) : ?>
+
+			<p>You have not fetched any posts</p>
+
+		<?php else : ?>
+
+			<p>You have <?php echo $fetched->found_posts ?> fetched posts</p>
+
+		<?php endif ?>
+
+		<p>
+			<a href="<?php echo add_query_arg( 'fetch_insta_posts', true, $this->settingsPage ) ?>" class="button button-primary" >Fetch Posts</a>
+		</p>
+
+		<p>
+			<a class="button" href="<?php echo $this->fetchUrl ?>" target="_blank" >View feed</a>
+			<a class="button" href="<?php echo add_query_arg( 'update_feature_images', true, $this->settingsPage ) ?>" >Update feature images</a>
 		</p>
 
 	<?php else : ?>
@@ -25,25 +49,6 @@
 		<p><a class="button button-primary" href="<?php echo $this->instagram->getLoginUrl() ?>">Set Account</a></p>
 
 	<?php endif ?>
-
-	<p><br></p>
-
-	<h2 class="title">Fetched Posts</h2>
-
-	<?php if ( $fetched->found_posts == 0 ) : ?>
-
-		<p>You have not fetched any posts</p>
-
-	<?php else : ?>
-
-		<p>You have <?php echo $fetched->found_posts ?> fetched posts</p>
-
-	<?php endif ?>
-
-	<p>
-		<a href="<?php echo add_query_arg( 'fetch_insta_posts', true, $this->settingsPage ) ?>" class="button button-primary" >Fetch Posts</a>
-		<a class="button" href="<?php echo $this->fetchUrl ?>" target="_blank" >View feed</a>
-	</p>
 
 
 </div>
