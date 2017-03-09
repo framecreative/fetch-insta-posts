@@ -9,6 +9,9 @@ Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
 
+Bitbucket Plugin URI: https://bitbucket.org/framecreative/fetch-insta-posts
+Bitbucket Branch: master
+
 */
 
 require 'Instagram-PHP-API/src/Instagram.php';
