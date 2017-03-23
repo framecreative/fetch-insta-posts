@@ -100,7 +100,7 @@ class Fetch_Insta_Posts {
 
 	function check_url_variables() {
 
-		if ( $_GET['page'] == 'instagram' ) {
+		if ( isset($_GET['page']) && $_GET['page'] == 'instagram' ) {
 
 			$this->setup_insta();
 
