@@ -168,7 +168,7 @@ class Fetch_Insta_Posts {
 			'order' => 'DESC'
 		) );
 
-		if ( $latestInstaPost[0] ) {
+		if ( isset($latestInstaPost[0]) ) {
 			$latestInstaPost = get_post_meta( $latestInstaPost[0]->ID, 'insta_id', true );
 		} else {
 			$latestInstaPost = false;
