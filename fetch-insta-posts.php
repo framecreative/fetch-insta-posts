@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 1.1.3
+Version: 1.1.4
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -215,7 +215,7 @@ class Fetch_Insta_Posts {
 			update_post_meta( $id, 'insta_img_height', $data->images->standard_resolution->height );
 			update_post_meta( $id, 'insta_tags', $data->tags );
 
-			$this->attach_feature_image( $id, $data->images->standard_resolution->url );
+			$this->attach_feature_image( $id, $data->images->standard_resolution->url, $data->caption->text );
 
 			do_action( 'fetch_insta_inserted_post', $id, $data );
 
@@ -223,35 +223,31 @@ class Fetch_Insta_Posts {
 
 	}
 
-	function attach_feature_image( $id, $featureUrl ) {
+	function attach_feature_image( $id, $featureUrl, $desc = null) {
 
-		$featureName = basename( $featureUrl );
-		$featureUpload = wp_upload_bits( $featureName, null, file_get_contents($featureUrl) );
+		require_once( ABSPATH . "wp-admin" . '/includes/image.php');
 
-		if (!$featureUpload['error']) {
+		if ($desc)
+			$imageExists = get_page_by_title( $desc, OBJECT, 'attachment');
 
-			$featureType = wp_check_filetype($featureName, null );
+		if (!$imageExists) {
 
-			$attachment = array(
-				'post_mime_type' => $featureType['type'],
-				'post_title' => preg_replace('/\.[^.]+$/', '', $featureName),
-				'post_content' => '',
-				'post_status' => 'inherit',
-				'post_author' => get_current_user_id()
-			);
+			$image = media_sideload_image($featureUrl, $id, $desc, 'id');
 
-			$attachment_id = wp_insert_attachment( $attachment, $featureUpload['file'], $id );
+			if (!is_wp_error($id)) {
 
-			if (!is_wp_error($attachment_id)) {
-
-				require_once( ABSPATH . "wp-admin" . '/includes/image.php');
-				$attachment_data = wp_generate_attachment_metadata( $attachment_id, $featureUpload['file'] );
-				wp_update_attachment_metadata($attachment_id, $attachment_data);
-
-				set_post_thumbnail( $id, $attachment_id );
+				$data = wp_get_attachment_metadata( $image ); 
+				wp_update_attachment_metadata($image, $data);
+				set_post_thumbnail( $id, $image );
 
 			}
 
+		} else {
+
+			$data = wp_get_attachment_metadata( $imageExists->ID ); 
+			wp_update_attachment_metadata($imageExists->ID, $data);
+			set_post_thumbnail( $id, $imageExists->ID );
+			
 		}
 
 	}
@@ -268,10 +264,11 @@ class Fetch_Insta_Posts {
 			if ( has_post_thumbnail( $item->ID ) ) continue;
 
 			$imageUrl = get_post_meta( $item->ID, 'insta_img', true );
+			$imageTitle = get_the_title( $item->ID );
 
 			if ( !$imageUrl ) continue;
 
-			$this->attach_feature_image( $item->ID, $imageUrl );
+			$this->attach_feature_image( $item->ID, $imageUrl, $imageTitle );
 
 		}
 
