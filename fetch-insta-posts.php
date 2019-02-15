@@ -147,7 +147,7 @@ class Fetch_Insta_Posts {
 
 			if ( isset($user->data) ) {
 				$this->account = $user->data;
-				$this->fetchUrl = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $token;
+				$this->fetchUrl = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $token . '&count=50';
 			}
 
 		}
@@ -174,7 +174,7 @@ class Fetch_Insta_Posts {
 			$latestInstaPost = false;
 		}
 
-		$url = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $this->instagram->getAccessToken();
+		$url = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $this->instagram->getAccessToken() . '&count=50';
 
 		if ( $latestInstaPost ) {
 			$url = add_query_arg( 'min_id', $latestInstaPost, $url );
