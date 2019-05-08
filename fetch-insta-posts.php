@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 1.1.7
+Version: 1.2
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -24,12 +24,14 @@ class Fetch_Insta_Posts {
 	private $account;
 	private $clientID;
 	private $clientSecret;
+	private $tokenOption = 'fetch_insta_posts_token';
 
 	function __construct() {
 
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
 		add_action( 'admin_init', array( $this, 'check_url_variables' ) );
+        add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) );
 		add_action( 'init', array( $this, 'schedule_fetch' ) );
@@ -43,6 +45,25 @@ class Fetch_Insta_Posts {
 		$this->clientSecret = 'ade4c0d81ec44962a8851c45c7afe2b3';
 
 	}
+
+	function get_login_url() {
+
+	    if ( !$this->instagram )
+	        return null;
+
+	    $state = array(
+	        'return_uri' => admin_url( 'options-general.php' ),
+            'page' => 'instagram'
+        );
+
+	    $loginUrl = $this->instagram->getLoginUrl();
+
+	    $loginUrl = add_query_arg( 'state', urlencode( serialize($state) ), $loginUrl );
+
+	    return $loginUrl;
+
+
+    }
 
 	function register_post_type() {
 
@@ -98,6 +119,22 @@ class Fetch_Insta_Posts {
 		
 	}
 
+	function admin_notices() {
+
+        if ( isset($_GET['page']) && $_GET['page'] == 'instagram' )
+            return;
+
+	    $token = get_option( $this->tokenOption );
+
+	    if ( $token )
+	        return;
+
+        printf( '<div class="%1$s"><p>%2$s</p></div>',
+            'notice notice-warning',
+            "<strong>Instagram posts not importing</strong> - No account is currently set, you may have been logged out automatically.<br> Visit the <a href='$this->settingsPage'>settings page</a> to set your account and restart the importer." );
+
+    }
+
 	function check_url_variables() {
 
 		if ( isset($_GET['page']) && $_GET['page'] == 'instagram' ) {
@@ -115,12 +152,12 @@ class Fetch_Insta_Posts {
 			}
 
 			if ( isset($_GET['insta_token']) ) {
-				update_option( 'fetch_insta_posts_token', $_GET['insta_token'] );
+				update_option( $this->tokenOption, $_GET['insta_token'] );
 				wp_redirect( $this->settingsPage );
 			}
 
 			if ( isset($_GET['remove_insta_account']) ) {
-				delete_option( 'fetch_insta_posts_token' );
+				delete_option( $this->tokenOption );
 				wp_redirect( $this->settingsPage );
 			}
 
@@ -135,10 +172,10 @@ class Fetch_Insta_Posts {
 		$this->instagram = new Instagram(array(
 			'apiKey' => $this->clientID,
 			'apiSecret' => $this->clientSecret,
-			'apiCallback' => add_query_arg( 'return_uri', $this->settingsPage, $this->tokenHelper ) 
-		));
+			'apiCallback' => $this->tokenHelper
+        ));
 
-		$token = get_option( 'fetch_insta_posts_token' );
+		$token = get_option( $this->tokenOption );
 
 		if ( $token ) {
 
@@ -148,7 +185,9 @@ class Fetch_Insta_Posts {
 			if ( isset($user->data) ) {
 				$this->account = $user->data;
 				$this->fetchUrl = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $token . '&count=50';
-			}
+			} else {
+                delete_option( $this->tokenOption );
+            }
 
 		}
 

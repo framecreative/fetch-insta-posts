@@ -46,7 +46,7 @@
 	<?php else : ?>
 
 		<p>There is currently no account set</p>
-		<p><a class="button button-primary" href="<?php echo $this->instagram->getLoginUrl() ?>">Set Account</a></p>
+		<p><a class="button button-primary" href="<?php echo $this->get_login_url() ?>">Set Account</a></p>
 
 	<?php endif ?>
 
