@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 1.2.1
+Version: 2.0.0
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -14,17 +14,16 @@ Bitbucket Branch: master
 
 */
 
-require 'Instagram-PHP-API/src/Instagram.php';
-use MetzWeb\Instagram\Instagram;
-
 class Fetch_Insta_Posts {
 
 	private $settingsPage;
-	private $instagram;
 	private $account;
 	private $clientID;
 	private $clientSecret;
 	private $tokenOption = 'fetch_insta_posts_token';
+    private $tokenExpiresOption = 'fetch_insta_posts_token_expires';
+	private $token;
+    private $tokenExpires;
 
 	function __construct() {
 
@@ -34,35 +33,35 @@ class Fetch_Insta_Posts {
         add_action( 'admin_notices', array( $this, 'admin_notices' ) );
 
 		add_filter( 'cron_schedules', array( $this, 'cron_schedules' ) );
-		add_action( 'init', array( $this, 'schedule_fetch' ) );
+		add_action( 'init', array( $this, 'schedule_jobs' ) );
+
 		add_action( 'fetch_insta_posts', array( $this, 'fetch_insta_posts' ) );
+        add_action( 'fetch_insta_posts_refresh_token', array( $this, 'refresh_token' ) );
+
 		add_filter( 'manage_insta-post_posts_columns' , array( $this, 'insta_post_admin_columns' ) );
 		add_action( 'manage_insta-post_posts_custom_column' , array( $this, 'insta_post_admin_column_content' ), 10, 2 );
 
-		$this->tokenHelper = 'http://instatoken.frmdv.com';
+		$this->tokenHelper = 'https://instatoken.frmdv.com/new.php';
 		$this->settingsPage = admin_url( 'options-general.php?page=instagram' );
-		$this->clientID = '6fe48e6965234e7690a13460aa543525';
+		$this->clientID = 295939274780027;
 		$this->clientSecret = 'ade4c0d81ec44962a8851c45c7afe2b3';
 
 	}
 
 	function get_login_url() {
 
-	    if ( !$this->instagram )
-	        return null;
-
 	    $return_uri = wp_parse_url($this->settingsPage);
 
 	    if ( ( isset($return_uri['query']) ) )
             $return_uri['query'] = wp_parse_args( $return_uri['query'] );
 
-	    $state = array(
-	        'return_uri' => $return_uri
-        );
-
-	    $loginUrl = $this->instagram->getLoginUrl();
-
-	    $loginUrl = add_query_arg( 'state', urlencode( serialize($state) ), $loginUrl );
+	    $loginUrl = add_query_arg( [
+	        'client_id' => $this->clientID,
+            'redirect_uri' => $this->tokenHelper,
+            'scope' => 'user_profile,user_media',
+            'response_type' => 'code',
+            'state' => urlencode( $this->settingsPage )
+        ], 'https://api.instagram.com/oauth/authorize' );
 
 	    return $loginUrl;
 
@@ -120,7 +119,7 @@ class Fetch_Insta_Posts {
 		));
 
 		include( 'instagram_settings.php' );
-		
+
 	}
 
 	function admin_notices() {
@@ -150,20 +149,27 @@ class Fetch_Insta_Posts {
 				wp_redirect( $this->settingsPage );
 			}
 
-			if ( isset($_GET['update_feature_images']) && $_GET['update_feature_images'] ) {
-				$this->update_feature_images();
-				wp_redirect( $this->settingsPage );
-			}
-
 			if ( isset($_GET['insta_token']) ) {
+
 				update_option( $this->tokenOption, $_GET['insta_token'] );
+                update_option( $this->tokenExpiresOption, $_GET['token_expires'] );
+
 				wp_redirect( $this->settingsPage );
+
 			}
 
 			if ( isset($_GET['remove_insta_account']) ) {
+
 				delete_option( $this->tokenOption );
+                delete_option( $this->tokenExpiresOption );
+
 				wp_redirect( $this->settingsPage );
 			}
+
+            if ( isset($_GET['refresh_token']) ) {
+                $this->refresh_token();
+                wp_redirect( $this->settingsPage );
+            }
 
 		}
 
@@ -171,37 +177,77 @@ class Fetch_Insta_Posts {
 
 	function setup_insta() {
 
-		if ( !$this->clientID || !$this->clientSecret ) return;
+		$this->token = get_option( $this->tokenOption );
+        $this->tokenExpires = get_option( $this->tokenExpiresOption );
 
-		$this->instagram = new Instagram(array(
-			'apiKey' => $this->clientID,
-			'apiSecret' => $this->clientSecret,
-			'apiCallback' => $this->tokenHelper
-        ));
+		if ( $this->token ) {
 
-		$token = get_option( $this->tokenOption );
-
-		if ( $token ) {
-
-			$this->instagram->setAccessToken($token);
-			$user = $this->instagram->getUser();
-
-			if ( isset($user->data) ) {
-				$this->account = $user->data;
-				$this->fetchUrl = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $token . '&count=50';
-			} else {
-                delete_option( $this->tokenOption );
-            }
+		    $this->account = $this->get_account();
 
 		}
 
 	}
 
+	function refresh_token() {
+
+	    if ( !$this->token ) {
+	        return;
+        }
+
+        $url = add_query_arg( [
+            'access_token' => $this->token,
+            'grant_type' => 'ig_refresh_token'
+        ], 'https://graph.instagram.com/refresh_access_token' );
+
+        $data = wp_remote_get( $url );
+
+        if ( is_wp_error( $data ) ) {
+            return;
+        }
+
+        $data = json_decode( $data['body'] );
+
+        update_option( $this->tokenOption, $data->access_token );
+        update_option( $this->tokenExpiresOption, time() + intval($data->expires_in) );
+
+    }
+
+	function get_account() {
+
+	    if ( !$this->token ) {
+	        return null;
+        }
+
+	    $url = add_query_arg( [
+            'access_token' => $this->token,
+            'fields' => 'id,username'
+        ], 'https://graph.instagram.com/me' );
+
+
+	    $data = wp_remote_get( $url );
+
+	    if ( is_wp_error( $data ) || $data['response']['code'] !== 200 )
+	        return null;
+
+	    return json_decode( $data['body'] );
+
+
+    }
+
+    function get_feed_url() {
+
+	    return add_query_arg( [
+	        'fields' => 'caption,id,media_type,media_url,permalink,thumbnail_url,timestamp',
+            'access_token' => $this->token
+        ], 'https://graph.instagram.com/me/media' );
+
+    }
+
 	function fetch_insta_posts() {
 
 		$this->setup_insta();
 
-		if ( !$this->account ) return;
+		if ( !$this->token ) return;
 
 		$latestInstaPost = get_posts( array(
 			'post_type' => 'insta-post',
@@ -212,24 +258,24 @@ class Fetch_Insta_Posts {
 		) );
 
 		if ( isset($latestInstaPost[0]) ) {
-			$latestInstaPost = get_post_meta( $latestInstaPost[0]->ID, 'insta_id', true );
+			$latestInstaPostLink = get_post_meta( $latestInstaPost[0]->ID, 'insta_link', true );
 		} else {
-			$latestInstaPost = false;
+            $latestInstaPostLink = false;
 		}
 
-		$url = 'https://api.instagram.com/v1/users/' . $this->account->id . '/media/recent?access_token=' . $this->instagram->getAccessToken() . '&count=50';
+		$url = $this->get_feed_url();
 
-		if ( $latestInstaPost ) {
-			$url = add_query_arg( 'min_id', $latestInstaPost, $url );
-		}
+		$feed = wp_remote_get( $url );
 
-		$feed = file_get_contents( $url );
-		$feed = json_decode( $feed );
+		if ( is_wp_error( $feed ) )
+		    return;
+
+		$feed = json_decode( $feed['body'] );
 
 
 		foreach( $feed->data as $data ) {
 
-			if ( $data->id == $latestInstaPost ) break;
+			if ( $data->permalink == $latestInstaPostLink ) break;
 
 			$this->create_insta_post( $data );
 
@@ -239,11 +285,10 @@ class Fetch_Insta_Posts {
 
 	function create_insta_post( $data ) {
 
-		$created = new DateTime();
-		$created->setTimestamp($data->created_time);
+		$created = new DateTime( $data->timestamp );
 
 		$args = array(
-			'post_title' => $data->caption->text,
+			'post_title' => $data->caption,
 			'post_status' => 'publish',
 			'post_type' => 'insta-post',
 			'post_date' => $created->format('Y-m-d H:i:s')
@@ -251,14 +296,14 @@ class Fetch_Insta_Posts {
 
 		if ( $id = wp_insert_post( $args ) ) {
 
-			update_post_meta( $id, 'insta_id', $data->id );
-			update_post_meta( $id, 'insta_link', $data->link );
-			update_post_meta( $id, 'insta_img', $data->images->standard_resolution->url );
-			update_post_meta( $id, 'insta_img_width', $data->images->standard_resolution->width );
-			update_post_meta( $id, 'insta_img_height', $data->images->standard_resolution->height );
-			update_post_meta( $id, 'insta_tags', $data->tags );
+		    $imageUrl = $data->media_type === 'IMAGE' ? $data->media_url : $data->thumbnail_url;
 
-			$this->attach_feature_image( $id, $data->images->standard_resolution->url, $data->caption->text );
+			update_post_meta( $id, 'insta_id', $data->id );
+			update_post_meta( $id, 'insta_link', $data->permalink );
+			update_post_meta( $id, 'insta_img', $imageUrl );
+            update_post_meta( $id, 'insta_media_type', $data->media_type );
+
+			$this->attach_feature_image( $id, $imageUrl, $data->caption );
 
 			do_action( 'fetch_insta_inserted_post', $id, $data );
 
@@ -281,7 +326,7 @@ class Fetch_Insta_Posts {
 
 			if (!is_wp_error($image)) {
 
-				$data = wp_get_attachment_metadata( $image ); 
+				$data = wp_get_attachment_metadata( $image );
 				wp_update_attachment_metadata($image, $data);
 				set_post_thumbnail( $id, $image );
 
@@ -289,35 +334,14 @@ class Fetch_Insta_Posts {
 
 		} else {
 
-			$data = wp_get_attachment_metadata( $imageExists->ID ); 
+			$data = wp_get_attachment_metadata( $imageExists->ID );
 			wp_update_attachment_metadata($imageExists->ID, $data);
 			set_post_thumbnail( $id, $imageExists->ID );
-			
-		}
-
-	}
-
-	function update_feature_images() {
-
-		$instaPosts = get_posts([
-			'post_type' => 'insta-post',
-			'nopaging' => true
-		]);
-
-		foreach ( $instaPosts as $item ) {
-
-			if ( has_post_thumbnail( $item->ID ) ) continue;
-
-			$imageUrl = get_post_meta( $item->ID, 'insta_img', true );
-			$imageTitle = get_the_title( $item->ID );
-
-			if ( !$imageUrl ) continue;
-
-			$this->attach_feature_image( $item->ID, $imageUrl, $imageTitle );
 
 		}
 
 	}
+
 
 	function cron_schedules( $schedules ) {
 
@@ -329,11 +353,15 @@ class Fetch_Insta_Posts {
 		return $schedules;
 	}
 
-	function schedule_fetch() {
+	function schedule_jobs() {
 
 		if ( !wp_next_scheduled('fetch_insta_posts') ) {
 			wp_schedule_event( time(), 'qtr-hour', 'fetch_insta_posts' );
 		}
+
+        if ( !wp_next_scheduled('fetch_insta_posts_refresh_token') ) {
+            wp_schedule_event( time(), 'daily', 'fetch_insta_posts_refresh_token' );
+        }
 
 	}
 

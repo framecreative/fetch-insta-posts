@@ -5,18 +5,19 @@
 
 	<h2 class="title">Account</h2>
 
-	<?php if ( !$this->instagram ) : ?>
-
-		<p>Client settings must be set before the account can be set</p>
-
-	<?php elseif ( $this->account ) : ?>
+	<?php if ( $this->token ) : ?>
 
 		<p>
-			Current Account: <strong><?php echo $this->account->full_name ?> (@<?php echo $this->account->username ?>)</strong>
+			Current Account: <strong><?php echo $this->account ? '@' . $this->account->username : 'Your account could not be accessed. Please remove and reconnect.' ?></strong>
+
+            <?php if ( isset($_GET['debug']) ) : ?>
+                <br>Token: <?php echo $this->token ?>
+                <br>Token Expires: <?php echo date( 'jS F Y, g:i:s a (e)', $this->tokenExpires ) ?>
+            <?php endif ?>
 		</p>
 
 		<p>
-			<a class="button button-primary" href="<?php echo $this->instagram->getLoginUrl() ?>">Replace Account</a> 
+			<a class="button button-primary" href="<?php echo $this->get_login_url() ?>">Replace Account</a>
 			<a href="<?php echo add_query_arg( 'remove_insta_account', true, $this->settingsPage ) ?>" class="button">Remove Account</a>
 		</p>
 
@@ -36,12 +37,9 @@
 
 		<p>
 			<a href="<?php echo add_query_arg( 'fetch_insta_posts', true, $this->settingsPage ) ?>" class="button button-primary" >Fetch Posts</a>
+            <a class="button" href="<?php echo $this->get_feed_url() ?>" target="_blank" >View feed</a>
 		</p>
 
-		<p>
-			<a class="button" href="<?php echo $this->fetchUrl ?>" target="_blank" >View feed</a>
-			<a class="button" href="<?php echo add_query_arg( 'update_feature_images', true, $this->settingsPage ) ?>" >Update feature images</a>
-		</p>
 
 	<?php else : ?>
 

@@ -13,3 +13,8 @@ Instagram data will be saved to custom fields. Images will also be downloaded an
 # Extending #
 
 The action 'fetch_insta_inserted_post' is called after each new post is inserted. This can be used to modify the post, for instance adding terms to it.
+
+
+# Version 2 #
+
+Account connection will need to be refreshed after install because new tokens are needed. Image width and height meta information won't be saved on posts, but can be accessed from the thumnail attachment.
