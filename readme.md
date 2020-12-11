@@ -18,3 +18,11 @@ The action 'fetch_insta_inserted_post' is called after each new post is inserted
 # Version 2 #
 
 Account connection will need to be refreshed after install because new tokens are needed. Image width and height meta information won't be saved on posts, but can be accessed from the thumnail attachment.
+
+## Version 2.1 ##
+
+Add support for Carousel Images (loads first image only). Change to a 'create or update' strategy to update posts in the feed if data has changed (ie: image).
+
+# A word on tokens #
+
+Facebook / Instagram seem determined not to approve out application, so for this to work each client account must be added as a "tester" to the Frame Facebook Feed AP under the 'Instagram basic display' section.

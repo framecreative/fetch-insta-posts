@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 2.0.0
+Version: 2.1.0
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -15,6 +15,9 @@ Bitbucket Branch: master
 */
 
 class Fetch_Insta_Posts {
+
+
+	const POST_TYPE = 'insta-post';
 
 	private $settingsPage;
 	private $account;
@@ -99,7 +102,7 @@ class Fetch_Insta_Posts {
 			'show_ui'			 => true
 		);
 
-		register_post_type( 'insta-post', $args );
+		register_post_type( self::POST_TYPE, $args );
 
 	}
 
@@ -114,7 +117,7 @@ class Fetch_Insta_Posts {
 		$this->setup_insta();
 
 		$fetched = new WP_Query(array(
-			'post_type' => 'insta-post',
+			'post_type' => self::POST_TYPE,
 			'posts_per_page' => 20
 		));
 
@@ -250,7 +253,7 @@ class Fetch_Insta_Posts {
 		if ( !$this->token ) return;
 
 		$latestInstaPost = get_posts( array(
-			'post_type' => 'insta-post',
+			'post_type' => self::POST_TYPE,
 			'posts_per_page' => 1,
 			'post_status' => [ 'publish', 'trash' ],
 			'orderby' => 'date',
@@ -275,11 +278,37 @@ class Fetch_Insta_Posts {
 
 		foreach( $feed->data as $data ) {
 
-			if ( $data->permalink == $latestInstaPostLink ) break;
-
-			$this->create_insta_post( $data );
+			$this->save_insta_post( $data );
 
 		}
+
+	}
+
+	function save_insta_post( $data ) {
+
+		$id = $this->find_insta_post_id( $data->id );
+
+		if ( ! $id ) {
+			$id = $this->create_insta_post( $data );
+		}
+
+		if ( ! $id ) {
+			error_log( 'Unable to create insta post: ' . json_encode( $data ) );
+			return;
+		}
+
+		$media_types = [ 'IMAGE', 'CAROUSEL_ALBUM' ];
+
+		$imageUrl = in_array( $data->media_type, $media_types ) ? $data->media_url : $data->thumbnail_url;
+
+		update_post_meta( $id, 'insta_id', $data->id );
+		update_post_meta( $id, 'insta_link', $data->permalink );
+		update_post_meta( $id, 'insta_img', $imageUrl );
+		update_post_meta( $id, 'insta_media_type', $data->media_type );
+
+		$this->attach_feature_image( $id, $imageUrl, $data->caption );
+
+		do_action( 'fetch_insta_inserted_post', $id, $data );
 
 	}
 
@@ -294,21 +323,30 @@ class Fetch_Insta_Posts {
 			'post_date' => $created->format('Y-m-d H:i:s')
 		);
 
-		if ( $id = wp_insert_post( $args ) ) {
+		return wp_insert_post( $args );
+	}
 
-		    $imageUrl = $data->media_type === 'IMAGE' ? $data->media_url : $data->thumbnail_url;
+	function find_insta_post_id( $id = ''){
+		if ( ! $id ) return null;
 
-			update_post_meta( $id, 'insta_id', $data->id );
-			update_post_meta( $id, 'insta_link', $data->permalink );
-			update_post_meta( $id, 'insta_img', $imageUrl );
-            update_post_meta( $id, 'insta_media_type', $data->media_type );
+		$args = [
+			'post_type' => self::POST_TYPE,
+			'posts_per_page' => 1,
+			'post_status' => [ 'publish', 'trash' ],
+			'meta_query' => [
+				[
+					'meta_key' => 'insta_id',
+					'meta_value' => $id
+				]
+			],
+			'fields' => 'ids'
+		];
 
-			$this->attach_feature_image( $id, $imageUrl, $data->caption );
+		$instaQuery = new WP_Query( $args );
 
-			do_action( 'fetch_insta_inserted_post', $id, $data );
+		if ( ! $instaQuery->posts || empty( $instaQuery->posts ) ) return null;
 
-		}
-
+		return $instaQuery->posts[0];
 	}
 
 	function attach_feature_image( $id, $featureUrl, $desc = null) {
