@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 2.1.0
+Version: 2.1.1
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -285,8 +285,11 @@ class Fetch_Insta_Posts {
 	}
 
 	function save_insta_post( $data ) {
-
 		$id = $this->find_insta_post_id( $data->id );
+
+		// If something has gone wrong and the site has stored invalid duplicates
+		// we want to remove those posts and re-import from the feed
+		$this->clear_duplicate_posts($data, $id);
 
 		if ( ! $id ) {
 			$id = $this->create_insta_post( $data );
@@ -326,6 +329,35 @@ class Fetch_Insta_Posts {
 		return wp_insert_post( $args );
 	}
 
+	function clear_duplicate_posts($data, $validId) {
+		// This uses the post permalink to delete, as it looks like the system was storing
+		// IDs differently at some point - but the unique permalink stayed the same.
+
+		$args = [
+			'post_type' => self::POST_TYPE,
+			'posts_per_page' => 0,
+			'post_status' => [ 'publish', 'trash' ],
+			'post__not_in' => [ $validId ],
+			'meta_query' => [
+				[
+					'key' => 'insta_link',
+					'value' => $data->permalink
+				]
+			],
+			'fields' => 'ids'
+		];
+
+		$instaQuery = new WP_Query( $args );
+
+		if ( $instaQuery->posts && !empty( $instaQuery->posts ) ) {
+			foreach( $instaQuery->posts as $post_id) {
+				wp_delete_post($post_id, true);
+			}
+		}
+
+		return null;
+	}
+
 	function find_insta_post_id( $id = ''){
 		if ( ! $id ) return null;
 
@@ -335,8 +367,8 @@ class Fetch_Insta_Posts {
 			'post_status' => [ 'publish', 'trash' ],
 			'meta_query' => [
 				[
-					'meta_key' => 'insta_id',
-					'meta_value' => $id
+					'key' => 'insta_id',
+					'value' => $id
 				]
 			],
 			'fields' => 'ids'
@@ -354,6 +386,8 @@ class Fetch_Insta_Posts {
 		require_once(ABSPATH . 'wp-admin/includes/media.php');
 		require_once(ABSPATH . 'wp-admin/includes/file.php');
 		require_once(ABSPATH . 'wp-admin/includes/image.php');
+
+		$desc = $this->convert_smart_quotes($desc);
 
 		if ($desc)
 			$imageExists = get_page_by_title( $desc, OBJECT, 'attachment');
@@ -426,6 +460,12 @@ class Fetch_Insta_Posts {
 
 	}
 
+	function convert_smart_quotes($string) { 
+		$search = array(chr(145), chr(146), chr(147), chr(148), chr(151)); 
+		$replace = array("'", "'", '"', '"', '-'); 
+
+		return str_replace($search, $replace, $string); 
+	} 
 
 }
 
