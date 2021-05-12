@@ -27,6 +27,7 @@ class Fetch_Insta_Posts {
     private $tokenExpiresOption = 'fetch_insta_posts_token_expires';
 	private $token;
     private $tokenExpires;
+	private $forceUpdate;
 
 	function __construct() {
 
@@ -146,6 +147,10 @@ class Fetch_Insta_Posts {
 		if ( isset($_GET['page']) && $_GET['page'] == 'instagram' ) {
 
 			$this->setup_insta();
+
+			if ( isset($_GET['force_update']) && $_GET['force_update'] ) {
+				$this->forceUpdate = true;
+			}
 
 			if ( isset($_GET['fetch_insta_posts']) && $_GET['fetch_insta_posts'] ) {
 				$this->fetch_insta_posts();
@@ -285,11 +290,14 @@ class Fetch_Insta_Posts {
 	}
 
 	function save_insta_post( $data ) {
-		$id = $this->find_insta_post_id( $data->id );
+		if (!$this->forceUpdate) {
+			$id = $this->find_insta_post_id( $data->id );
+		}
 
 		// If something has gone wrong and the site has stored invalid duplicates
 		// we want to remove those posts and re-import from the feed
-		$this->clear_duplicate_posts($data, $id);
+		$validPosts = $this->forceUpdate ? null : $id;
+		$this->clear_posts($data, $validPosts);
 
 		if ( ! $id ) {
 			$id = $this->create_insta_post( $data );
@@ -329,7 +337,7 @@ class Fetch_Insta_Posts {
 		return wp_insert_post( $args );
 	}
 
-	function clear_duplicate_posts($data, $validId) {
+	function clear_posts($data, $validId) {
 		// This uses the post permalink to delete, as it looks like the system was storing
 		// IDs differently at some point - but the unique permalink stayed the same.
 
@@ -337,15 +345,23 @@ class Fetch_Insta_Posts {
 			'post_type' => self::POST_TYPE,
 			'posts_per_page' => 0,
 			'post_status' => [ 'publish', 'trash' ],
-			'post__not_in' => [ $validId ],
 			'meta_query' => [
+				'relation' => 'OR',
 				[
 					'key' => 'insta_link',
 					'value' => $data->permalink
+				],
+				[
+					'key' => 'insta_id',
+					'value' => $data->id
 				]
 			],
 			'fields' => 'ids'
 		];
+
+		if ($validId) {
+			$args['post__not_in'] = [ $validId ];
+		}
 
 		$instaQuery = new WP_Query( $args );
 
