@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 2.1.1
+Version: 2.1.2
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -41,6 +41,8 @@ class Fetch_Insta_Posts {
 
 		add_action( 'fetch_insta_posts', array( $this, 'fetch_insta_posts' ) );
         add_action( 'fetch_insta_posts_refresh_token', array( $this, 'refresh_token' ) );
+		add_action( 'fetch_insta_posts_clean_up', array( $this, 'clean_up' ) );
+		add_action( 'fetch_insta_posts_delete_attachment', array( $this, 'delete_attachment' ) );
 
 		add_filter( 'manage_insta-post_posts_columns' , array( $this, 'insta_post_admin_columns' ) );
 		add_action( 'manage_insta-post_posts_custom_column' , array( $this, 'insta_post_admin_column_content' ), 10, 2 );
@@ -252,7 +254,6 @@ class Fetch_Insta_Posts {
     }
 
 	function fetch_insta_posts() {
-
 		$this->setup_insta();
 
 		if ( !$this->token ) return;
@@ -287,6 +288,13 @@ class Fetch_Insta_Posts {
 
 		}
 
+		// Clean up - These are mostly tasks to help prevent and tidy up any duplicate images (if present)
+		wp_schedule_single_event( time(), 'fetch_insta_posts_clean_up' );
+	}
+
+	function clean_up() {
+		$this->clear_detached_media();
+		$this->clear_duplicate_attached_images();
 	}
 
 	function save_insta_post( $data ) {
@@ -318,6 +326,8 @@ class Fetch_Insta_Posts {
 		update_post_meta( $id, 'insta_media_type', $data->media_type );
 
 		$this->attach_feature_image( $id, $imageUrl, $data->caption );
+
+        update_post_meta( $id, 'insta_desc_hash', md5($data->caption) );
 
 		do_action( 'fetch_insta_inserted_post', $id, $data );
 
@@ -367,11 +377,81 @@ class Fetch_Insta_Posts {
 
 		if ( $instaQuery->posts && !empty( $instaQuery->posts ) ) {
 			foreach( $instaQuery->posts as $post_id) {
+				$images = get_attached_media('image', $post_id);
+
 				wp_delete_post($post_id, true);
+				
+				foreach($images as $image) {
+					wp_delete_attachment($image, true);
+				}
 			}
 		}
 
 		return null;
+	}
+
+	function clear_detached_media() {
+		$args = array(
+			'post_type'       => 'attachment',
+			'post_status'     => 'inherit',
+			'posts_per_page'  => -1,
+			'post_parent'	  => 0,
+			'fields' 		  => 'ids',
+			'meta_query' => array(
+				array(
+					'key'     => '_source_url',
+					'value'   => 'cdninstagram.com',
+					'compare' => 'LIKE',
+				)
+			)
+		);
+
+		$detachedMedia = new WP_Query( $args );
+
+		foreach($detachedMedia->posts as $media) {
+			wp_schedule_single_event( time(), 'fetch_insta_posts_delete_attachment', array( $media ) );
+		}
+	}
+
+	function delete_attachment($id) {
+		wp_delete_attachment( $id, true );
+	}
+
+	function clear_duplicate_attached_images() {
+		$args = [
+			'post_type' => self::POST_TYPE,
+			'posts_per_page' => -1,
+			'post_status' => [ 'publish', 'trash' ]
+		];
+
+		$postQuery = new WP_Query($args);
+
+		foreach($postQuery->posts as $post) {
+
+			$args = array(
+				'post_parent'    => $post->ID,
+				'post_type'      => 'attachment',
+				'numberposts'    => -1, // show all
+				'post_status'    => 'any',
+				'post_mime_type' => 'image',
+				'orderby'        => 'menu_order',
+				'order'          => 'ASC',
+				'fields' 		 => 'ids'
+		   );
+	
+			$images = get_posts($args);
+
+			if (count($images) >= 2) {
+				// Keep the last (latest) attachment added
+				array_pop($images);
+
+				foreach($images as $image) {
+					// deletes all duplicate attachments
+					wp_schedule_single_event( time(), 'fetch_insta_posts_delete_attachment', array( $image ) );
+				}
+			}
+		}
+
 	}
 
 	function find_insta_post_id( $id = ''){
@@ -403,10 +483,10 @@ class Fetch_Insta_Posts {
 		require_once(ABSPATH . 'wp-admin/includes/file.php');
 		require_once(ABSPATH . 'wp-admin/includes/image.php');
 
-		$desc = $this->convert_smart_quotes($desc);
-
-		if ($desc)
-			$imageExists = get_page_by_title( $desc, OBJECT, 'attachment');
+		if ($desc) {
+            $post_hash = get_post_meta($id, 'insta_desc_hash', true);
+            $imageExists = $post_hash && $post_hash === md5($desc);
+        }
 
 		if (!$imageExists) {
 
@@ -486,23 +566,4 @@ class Fetch_Insta_Posts {
 }
 
 new Fetch_Insta_Posts();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
