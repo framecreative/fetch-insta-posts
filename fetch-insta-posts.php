@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 2.1.3
+Version: 2.1.4
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -160,9 +160,6 @@ class Fetch_Insta_Posts {
 			}
 
 			if ( isset($_GET['clean_up']) && $_GET['clean_up'] ) {
-				// if (!wp_next_scheduled( 'fetch_insta_posts_clean_up' )) {
-				// 	wp_schedule_single_event( time(), 'fetch_insta_posts_clean_up' );
-				// }
 				$this->clean_up();
 
 				wp_redirect( $this->settingsPage );
@@ -303,7 +300,7 @@ class Fetch_Insta_Posts {
 
 		// Clean up - These are mostly tasks to help prevent and tidy up any duplicate images (if present)
 		if (!wp_next_scheduled( 'fetch_insta_posts_clean_up' )) {
-			wp_schedule_single_event( time(), 'fetch_insta_posts_clean_up' );
+			wp_schedule_single_event( time() + 20, 'fetch_insta_posts_clean_up' );
 		}
 	}
 
@@ -431,7 +428,7 @@ class Fetch_Insta_Posts {
 
 			foreach($chunks as $chunk) {
 				if ( !wp_next_scheduled( 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) ) ) {
-					wp_schedule_single_event( time(), 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) );
+					wp_schedule_single_event( time() + 20, 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) );
 				}
 			}
 		}
@@ -493,7 +490,7 @@ class Fetch_Insta_Posts {
 			
 			foreach($chunks as $chunk) {
 				if ( !wp_next_scheduled( 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) ) ) {
-					wp_schedule_single_event( time(), 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) );
+					wp_schedule_single_event( time() + 20, 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) );
 				}
 			}
 		}
