@@ -38,7 +38,7 @@
 	<p>
 		<a href="<?php echo add_query_arg( 'fetch_insta_posts', true, $this->settingsPage ) ?>" class="button button-primary" >Fetch Posts</a>
 		<a href="<?php echo add_query_arg( ['fetch_insta_posts' => true, 'force_update' => true], $this->settingsPage ) ?>" class="button button-warning">Fetch and Force Update</a>
-		<a href="<?php echo add_query_arg( ['fetch_insta_posts' => true, 'clean_up' => true], $this->settingsPage ) ?>" class="button button-warning">Clean up old images</a>
+		<a href="<?php echo add_query_arg( 'clean_up', true, $this->settingsPage ) ?>" class="button button-warning">Clean up old images</a>
 		<a class="button" href="<?php echo $this->get_feed_url() ?>" target="_blank" >View feed</a>
 	</p>
 
