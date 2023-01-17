@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 2.1.4
+Version: 2.1.5
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -469,14 +469,13 @@ class Fetch_Insta_Posts {
 		   );
 	
 			$images = get_posts($args);
+			$thumbnail_id = get_post_thumbnail_id($post->ID);
+			
+			if (!in_array($thumbnail_id, $this->thumbnails)) {
+				$this->thumbnails[] = $thumbnail_id;
+			}
 
 			if (count($images) >= 2) {
-				$thumbnail_id = get_post_thumbnail_id($post->ID);
-
-				if (!in_array($thumbnail_id, $this->thumbnails)) {
-					$this->thumbnails[] = $thumbnail_id;
-				}
-
 				$ids = array_merge($ids, $images);
 			}
 		}
