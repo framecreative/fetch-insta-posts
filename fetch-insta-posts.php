@@ -4,7 +4,7 @@
 
 Plugin Name: Fetch Instagram Posts
 Plugin URI: http://framecreative.com.au
-Version: 2.1.2
+Version: 2.1.3
 Author: Frame
 Author URI: http://framecreative.com.au
 Description: Fetch latest posts from Instagram and save them in WP
@@ -42,7 +42,8 @@ class Fetch_Insta_Posts {
 		add_action( 'fetch_insta_posts', array( $this, 'fetch_insta_posts' ) );
         add_action( 'fetch_insta_posts_refresh_token', array( $this, 'refresh_token' ) );
 		add_action( 'fetch_insta_posts_clean_up', array( $this, 'clean_up' ) );
-		add_action( 'fetch_insta_posts_delete_attachment', array( $this, 'delete_attachment' ) );
+		add_action( 'fetch_insta_posts_delete_attachment', array( $this, 'delete_insta_attachment' ) );
+		add_action( 'fetch_insta_posts_bulk_delete_attachments', array( $this, 'bulk_delete_insta_attachments' ) );
 
 		add_filter( 'manage_insta-post_posts_columns' , array( $this, 'insta_post_admin_columns' ) );
 		add_action( 'manage_insta-post_posts_custom_column' , array( $this, 'insta_post_admin_column_content' ), 10, 2 );
@@ -152,6 +153,15 @@ class Fetch_Insta_Posts {
 
 			if ( isset($_GET['force_update']) && $_GET['force_update'] ) {
 				$this->forceUpdate = true;
+			}
+
+			if ( isset($_GET['clean_up']) && $_GET['clean_up'] ) {
+				// if (!wp_next_scheduled( 'fetch_insta_posts_clean_up' )) {
+				// 	wp_schedule_single_event( time(), 'fetch_insta_posts_clean_up' );
+				// }
+				$this->clean_up();
+
+				wp_redirect( $this->settingsPage );
 			}
 
 			if ( isset($_GET['fetch_insta_posts']) && $_GET['fetch_insta_posts'] ) {
@@ -281,7 +291,6 @@ class Fetch_Insta_Posts {
 
 		$feed = json_decode( $feed['body'] );
 
-
 		foreach( $feed->data as $data ) {
 
 			$this->save_insta_post( $data );
@@ -289,7 +298,9 @@ class Fetch_Insta_Posts {
 		}
 
 		// Clean up - These are mostly tasks to help prevent and tidy up any duplicate images (if present)
-		wp_schedule_single_event( time(), 'fetch_insta_posts_clean_up' );
+		if (!wp_next_scheduled( 'fetch_insta_posts_clean_up' )) {
+			wp_schedule_single_event( time(), 'fetch_insta_posts_clean_up' );
+		}
 	}
 
 	function clean_up() {
@@ -325,9 +336,9 @@ class Fetch_Insta_Posts {
 		update_post_meta( $id, 'insta_img', $imageUrl );
 		update_post_meta( $id, 'insta_media_type', $data->media_type );
 
-		$this->attach_feature_image( $id, $imageUrl, $data->caption );
+		$this->attach_feature_image( $id, $imageUrl, $data->caption, $data->timestamp );
 
-        update_post_meta( $id, 'insta_desc_hash', md5($data->caption) );
+        update_post_meta( $id, 'insta_desc_hash', md5($data->caption . $data->timestamp) );
 
 		do_action( 'fetch_insta_inserted_post', $id, $data );
 
@@ -408,13 +419,26 @@ class Fetch_Insta_Posts {
 
 		$detachedMedia = new WP_Query( $args );
 
-		foreach($detachedMedia->posts as $media) {
-			wp_schedule_single_event( time(), 'fetch_insta_posts_delete_attachment', array( $media ) );
+		// Process as chunks incase there are a LOT of images.
+		if (count($detachedMedia->posts) > 0) {
+			$chunks = array_chunk($detachedMedia->posts, 50);
+
+			foreach($chunks as $chunk) {
+				if ( !wp_next_scheduled( 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) ) ) {
+					wp_schedule_single_event( time(), 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) );
+				}
+			}
 		}
 	}
 
-	function delete_attachment($id) {
+	function delete_insta_attachment($id) {
 		wp_delete_attachment( $id, true );
+	}
+
+	function bulk_delete_insta_attachments($ids) {
+		foreach($ids as $id) {
+			$this->delete_insta_attachment($id);
+		}
 	}
 
 	function clear_duplicate_attached_images() {
@@ -426,6 +450,8 @@ class Fetch_Insta_Posts {
 
 		$postQuery = new WP_Query($args);
 
+		$ids = [];
+
 		foreach($postQuery->posts as $post) {
 
 			$args = array(
@@ -434,7 +460,7 @@ class Fetch_Insta_Posts {
 				'numberposts'    => -1, // show all
 				'post_status'    => 'any',
 				'post_mime_type' => 'image',
-				'orderby'        => 'menu_order',
+				'orderby'        => 'post_date',
 				'order'          => 'ASC',
 				'fields' 		 => 'ids'
 		   );
@@ -442,12 +468,26 @@ class Fetch_Insta_Posts {
 			$images = get_posts($args);
 
 			if (count($images) >= 2) {
-				// Keep the last (latest) attachment added
-				array_pop($images);
+				$thumbnail_id = get_post_thumbnail_id($post->ID);
 
-				foreach($images as $image) {
-					// deletes all duplicate attachments
-					wp_schedule_single_event( time(), 'fetch_insta_posts_delete_attachment', array( $image ) );
+				if (($key = array_search($thumbnail_id, $images)) !== false) {
+					unset($images[$key]);
+				}
+
+				$ids = array_merge($ids, $images);
+			}
+		}
+
+		
+
+		// Process as chunks incase there are a LOT of images.
+		if (count($ids) > 0) {
+			$ids = array_unique($ids);
+			$chunks = array_chunk($ids, 50);
+			
+			foreach($chunks as $chunk) {
+				if ( !wp_next_scheduled( 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) ) ) {
+					wp_schedule_single_event( time(), 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) );
 				}
 			}
 		}
@@ -477,15 +517,15 @@ class Fetch_Insta_Posts {
 		return $instaQuery->posts[0];
 	}
 
-	function attach_feature_image( $id, $featureUrl, $desc = null) {
+	function attach_feature_image( $id, $featureUrl, $desc = null, $timestamp = null) {
 
 		require_once(ABSPATH . 'wp-admin/includes/media.php');
 		require_once(ABSPATH . 'wp-admin/includes/file.php');
 		require_once(ABSPATH . 'wp-admin/includes/image.php');
 
-		if ($desc) {
+		if ($desc && $timestamp) {
             $post_hash = get_post_meta($id, 'insta_desc_hash', true);
-            $imageExists = $post_hash && $post_hash === md5($desc);
+            $imageExists = $post_hash && $post_hash === md5($desc . $timestamp);
         }
 
 		if (!$imageExists) {
