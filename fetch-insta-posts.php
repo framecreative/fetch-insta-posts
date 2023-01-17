@@ -19,6 +19,7 @@ class Fetch_Insta_Posts {
 
 	const POST_TYPE = 'insta-post';
 
+	private $dir;
 	private $settingsPage;
 	private $account;
 	private $clientID;
@@ -28,8 +29,11 @@ class Fetch_Insta_Posts {
 	private $token;
     private $tokenExpires;
 	private $forceUpdate;
+	private $thumbnails = [];
 
 	function __construct() {
+
+		$this->dir = WP_PLUGIN_DIR . '/fetch-insta-posts';
 
 		add_action( 'init', array( $this, 'register_post_type' ) );
 		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
@@ -304,8 +308,9 @@ class Fetch_Insta_Posts {
 	}
 
 	function clean_up() {
-		$this->clear_detached_media();
+		$this->thumbnails = [];
 		$this->clear_duplicate_attached_images();
+		$this->clear_detached_media();
 	}
 
 	function save_insta_post( $data ) {
@@ -421,7 +426,8 @@ class Fetch_Insta_Posts {
 
 		// Process as chunks incase there are a LOT of images.
 		if (count($detachedMedia->posts) > 0) {
-			$chunks = array_chunk($detachedMedia->posts, 50);
+			$ids = array_diff($detachedMedia->posts, $this->thumbnails); // Remove all active thumbnail ids from list of ids to process
+			$chunks = array_chunk($ids, 50);
 
 			foreach($chunks as $chunk) {
 				if ( !wp_next_scheduled( 'fetch_insta_posts_bulk_delete_attachments', array( $chunk ) ) ) {
@@ -470,19 +476,19 @@ class Fetch_Insta_Posts {
 			if (count($images) >= 2) {
 				$thumbnail_id = get_post_thumbnail_id($post->ID);
 
-				if (($key = array_search($thumbnail_id, $images)) !== false) {
-					unset($images[$key]);
+				if (!in_array($thumbnail_id, $this->thumbnails)) {
+					$this->thumbnails[] = $thumbnail_id;
 				}
 
 				$ids = array_merge($ids, $images);
 			}
 		}
 
-		
-
 		// Process as chunks incase there are a LOT of images.
 		if (count($ids) > 0) {
 			$ids = array_unique($ids);
+			$ids = array_diff($ids, $this->thumbnails); // Remove all active thumbnail ids from list of ids to process
+
 			$chunks = array_chunk($ids, 50);
 			
 			foreach($chunks as $chunk) {
