@@ -38,10 +38,12 @@
 	<p>
 		<a href="<?php echo add_query_arg( 'fetch_insta_posts', true, $this->settingsPage ) ?>" class="button button-primary" >Fetch Posts</a>
 		<a href="<?php echo add_query_arg( ['fetch_insta_posts' => true, 'force_update' => true], $this->settingsPage ) ?>" class="button button-warning">Fetch and Force Update</a>
+		<a href="<?php echo add_query_arg( ['fetch_insta_posts' => true, 'clean_up' => true], $this->settingsPage ) ?>" class="button button-warning">Clean up old images</a>
 		<a class="button" href="<?php echo $this->get_feed_url() ?>" target="_blank" >View feed</a>
 	</p>
 
-	<p><em>* Forcing an update will result in all recent instagram being replaced.<br />Only use this if you know what you're doing!</em></p>
+	<p><em>* Forcing an update will result in all recent instagram posts being replaced.<br />Only use this if you know what you're doing!</em></p>
+	<p><em>* Cleaning up images can take a while depending on how many old / unattached images are present.</em></p>
 
 
 <?php else : ?>
